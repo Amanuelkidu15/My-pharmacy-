@@ -3,66 +3,83 @@ from flask import Flask, render_template_string, request, redirect
 
 app = Flask(__name__)
 
-# ዳታቤዝ መፍጠር እና መድኃኒቶችን ማስተዳደር
+# ዳታቤዝ መፍጠር እና ዋና ዋና መድኃኒቶችን መመዝገብ
 def init_db():
     conn = sqlite3.connect('pharmacy.db')
     cursor = conn.cursor()
+    # የመድኃኒት ሰንጠረዥ
     cursor.execute('''CREATE TABLE IF NOT EXISTS medicines 
-                      (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, price TEXT, stock INTEGER)''')
+                      (id INTEGER PRIMARY KEY, name TEXT, price TEXT)''')
+    
+    # የትዕዛዝ ሰንጠረዥ
+    cursor.execute('''CREATE TABLE IF NOT EXISTS orders 
+                      (id INTEGER PRIMARY KEY, customer_name TEXT, med_name TEXT, phone TEXT)''')
+    
+    # በብዛት የሚፈለጉ መድኃኒቶች ዝርዝር
+    essential_meds = [
+        ('Amoxicillin 500mg', '150 ETB'),
+        ('Paracetamol 500mg', '20 ETB'),
+        ('Azithromycin 500mg', '300 ETB'),
+        ('Ciprofloxacin 500mg', '250 ETB'),
+        ('Diclofenac 50mg', '80 ETB'),
+        ('Omeprazole 20mg', '120 ETB'),
+        ('Metformin 500mg', '110 ETB'),
+        ('Amlodipine 5mg', '140 ETB'),
+        ('Albendazole 400mg', '50 ETB'),
+        ('ORS (Oral Rehydration)', '15 ETB')
+    ]
+    
+    # ዝርዝሩ በዳታቤዙ ውስጥ መኖሩን ማረጋገጥ
+    cursor.execute("SELECT COUNT(*) FROM medicines")
+    if cursor.fetchone()[0] == 0:
+        cursor.executemany("INSERT INTO medicines (name, price) VALUES (?, ?)", essential_meds)
+    
     conn.commit()
     conn.close()
 
 HTML_CODE = """
 <!DOCTYPE html>
 <html>
-<head>
-    <title>Pharmacy Management</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-        body { font-family: sans-serif; background: #f4f7f6; padding: 20px; }
-        .box { background: white; max-width: 500px; margin: auto; padding: 20px; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
-        h1 { color: #27ae60; text-align: center; }
-        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
-        th { background: #27ae60; color: white; }
-        input { width: 92%; padding: 10px; margin: 5px 0; border: 1px solid #ddd; border-radius: 5px; }
-        button { width: 100%; padding: 12px; background: #27ae60; color: white; border: none; border-radius: 5px; cursor: pointer; }
-    </style>
-</head>
+<head><title>Amanuel Pharmacy</title></head>
 <body>
-    <div class="box">
-        <h1>💊 ፋርማሲ መቆጣጠሪያ</h1>
-        <table>
-            <tr><th>ስም</th><th>ዋጋ</th><th>ብዛት</th></tr>
-            {% for item in items %}
-            <tr><td>{{ item[1] }}</td><td>{{ item[2] }}</td><td>{{ item[3] }}</td></tr>
-            {% endfor %}
-        </table>
-        <hr>
-        <h3>አዲስ መዝግብ</h3>
-        <form method="POST">
-            <input type="text" name="name" placeholder="የመድኃኒት ስም" required>
-            <input type="text" name="price" placeholder="ዋጋ (ለምሳሌ፡ 20 ETB)" required>
-            <input type="number" name="stock" placeholder="ብዛት" required>
-            <button type="submit">መዝግብ</button>
-        </form>
-    </div>
+    <h1>Amanuel Online Pharmacy</h1>
+    <h3>Available Medicines (Alphabetical)</h3>
+    <table border="1">
+        <tr><th>Name</th><th>Price</th></tr>
+        {% for med in medicines %}
+        <tr><td>{{ med[1] }}</td><td>{{ med[2] }}</td></tr>
+        {% endfor %}
+    </table>
+    <hr>
+    <h3>Order Now</h3>
+    <form method="POST">
+        Name: <input type="text" name="customer_name" required><br>
+        Medicine: <input type="text" name="med_name" required><br>
+        Phone: <input type="text" name="phone" required><br>
+        <button type="submit">Place Order</button>
+    </form>
 </body>
 </html>
 """
 
 @app.route("/", methods=["GET", "POST"])
-def home():
+def index():
     conn = sqlite3.connect('pharmacy.db')
     cursor = conn.cursor()
+    
     if request.method == "POST":
-        name, price, stock = request.form.get("name"), request.form.get("price"), request.form.get("stock")
-        cursor.execute("INSERT INTO medicines (name, price, stock) VALUES (?, ?, ?)", (name, price, stock))
+        c_name = request.form.get("customer_name")
+        m_name = request.form.get("med_name")
+        phone = request.form.get("phone")
+        cursor.execute("INSERT INTO orders (customer_name, med_name, phone) VALUES (?, ?, ?)", 
+                       (c_name, m_name, phone))
         conn.commit()
-    cursor.execute("SELECT * FROM medicines")
-    items = cursor.fetchall()
+    
+    # መድኃኒቶችን በፊደል ቅደም ተከተል ማውጣት
+    cursor.execute("SELECT * FROM medicines ORDER BY name ASC")
+    medicines = cursor.fetchall()
     conn.close()
-    return render_template_string(HTML_CODE, items=items)
+    return render_template_string(HTML_CODE, medicines=medicines)
 
 if __name__ == "__main__":
     init_db()
